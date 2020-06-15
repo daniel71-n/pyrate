@@ -1,7 +1,7 @@
 # pyrate
 A program written in Python to keep organized lists of ratings. Underneath, it uses the sqlite3 module to store the entries in an sqlite database.
 
-
+```
 usage: 
      pyrate  {lists, add-list, del-list, add, from-file, del, show, change}
              --debugging
@@ -18,7 +18,7 @@ subcommands:
      {add-list,lists,del-list,add,from-file,show,del,change}
 
 
-
+```
 
 Note: 
 Eacho of the subcommands have their own command line parser and set of options. Each has a separate help page. 
