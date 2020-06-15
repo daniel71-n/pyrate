@@ -1,0 +1,600 @@
+#!/usr/bin/python
+
+import argparse
+from mod import *
+import os
+import sqlite3
+import mod
+# "maintain nicely-organized ratings lists"
+
+
+
+usage_form="\n{pad:5}pyrate  {{lists, add-list, del-list, add, from-file, del, show, change}}\n{pad:13}--debugging\n{pad:13}-h,--help".format(pad="")
+
+descript_form="Maintain nicely-organized ratings lists.\n Each of the subcommands listed here is its own separate subcommand and each has its own help page. So, for example, to get help on the 'show' subcommand, you can do 'pyrate show --help'.".format()
+
+
+main_parser = argparse.ArgumentParser(description=descript_form,
+                                      usage=usage_form,
+                                      formatter_class=argparse.RawDescriptionHelpFormatter)                                      
+
+
+main_parser.add_argument('--debugging', action='store_true', help='print out debugging and internal messages')
+
+
+
+
+#subparsers that will give each subcommand its own parser              
+subparsers = main_parser.add_subparsers(dest='subparsers',
+                                        title="subcommands")
+
+#######################global subcommands: add, show, delete etc
+
+glb_add_usage= "pyrate add-list NAME".format()
+glb_add_descript= "Add a new list named NAME\nExample: pyrate add-list somePodcast".format()
+#the add subcommand
+glb_add = subparsers.add_parser('add-list',
+                                description=glb_add_descript,
+                                usage=glb_add_usage,
+                                formatter_class=argparse.RawDescriptionHelpFormatter) #use the RawDescription class, which allows you to customize the help (specifically, description) output in help messages
+
+
+glb_add.add_argument('name',
+                     action='store',
+                     metavar="NAME",
+                     help='the name of the list to be added')
+
+
+
+
+glb_show_usage= "pyrate lists".format()
+glb_show_descript= "Print all the existing lists".format()
+
+#the lists subcommand
+glb_show = subparsers.add_parser('lists',
+                                 description=glb_show_descript,
+                                 usage=glb_show_usage,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+
+                                
+
+
+
+#the del subcommand
+glb_del_usage= "pyrate del-list list".format()
+glb_del_descript= "Delete the list named LIST.\nExample: pyrate del-list somePodcast\nNOTE: you can see all the existing lists using 'pyrate lists'".format()
+
+#the lists subcommand
+glb_del = subparsers.add_parser('del-list',
+                                 description=glb_del_descript,
+                                 usage=glb_del_usage,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+
+glb_del.add_argument('list',
+                     action='store',
+                     help="the name of the list to be deleted")
+
+
+###########################################################
+rater_add_usage= "pyrate add -t,--title TITLE -r,--rating RATING list".format()
+rater_add_descript = "Add an item titled TITLE with a rating of RATING to the list named list\nNote: the order of the arguments isn't fixed. For example, list can come before --rating\n\nExamples:\npyrate add -t episode1 -r7 somePodcast\npyrate add somePodcast --title='episode 5' --rating 10".format()
+
+#the add subcommand 
+rater_add = subparsers.add_parser('add',  # the add subcommand of the rater subparser
+                                 description=rater_add_descript,
+                                 usage=rater_add_usage,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+
+rater_add._optionals.title = 'Get help' # the 'optional arguments' group in the help output will now appear as being titled 'get help'
+
+
+
+
+#add subparser to read entries from a file instead of using --rating --title when adding items to a list; The help output will need considerable formattin
+
+rater_from_file_usage= "pyrate from-file file list".format()
+rater_from_file_descript = "Read entries from LIST and add them to FILE. \nFile should have one entry per line, formatted as title-rating pairs separated by a '==' (two equal signs).\n\nAn example of some entries:\n{pad:7}season1episode25==8\n{pad:7}season1episode26==3\n\nExample of calling pyrate:\n{pad:5}pyrate from-list somefile somePodcast".format(pad="")
+
+rater_read_from_file= subparsers.add_parser('from-file',
+                                 description=rater_from_file_descript,
+                                 usage=rater_from_file_usage,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+rater_read_from_file._optionals.title = 'Get help' # the 'optional arguments' group in the help output will now appear as being titled 'get help'
+
+###################################
+
+rater_show_usage= "pyrate show [--rated RATING | --pattern PATTERN] list".format()
+rater_show_descript = "Print the items from the list LIST that match either the rating specified with --rated or the pattern specified with --pattern.\n\nNotes:\n{pad:5}* you can only use either --rated or pattern, not both at once.\n{pad:5}* Both --rated and --pattern are optional. If you don't use either of them, all the items in the given list will be printed".format(pad="")
+
+rater_show = subparsers.add_parser('show',  # the show subcommand of the rater subcommand
+                                 description=rater_show_descript,
+                                 usage=rater_show_usage,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+rater_show._optionals.title = 'Get help' # the 'optional arguments' group in the help output will now appear as being titled 'get help'
+
+
+
+############################## --------------------rater del
+
+rater_del_usage= "pyrate del (-i,--item | --handle | --pattern) list".format()
+rater_del_descript = "Delete one or more items from the list LIST\n\nNotes:\n{pad:5}* Either --item,  --handle or --pattern MUST be used, but no more than one at a time\n{pad:5}* --item only lets you specify a single item to delete at a time, and it must be specified by its title\n{pad:5}* --handle lets you delete any number of items at time, specified by their handle\n{pad:5}* --pattern lets you delete any number of items at a time whose title matches the pattern passed as argument\n\n{pad:5}* The arguments don't have a fixed order. It's in fact recommended you pass the list argument first, after del, and use one of the three arguments mentioned above last, to avoid parsing errors.\n\n\n\nExamples:\n\tDelete an item by title : pyrate del -i 'season1episode15' somePodcast\n\tDelete a few items by their handle : pyrate del somePodcast --handle='10,15,20-23,27'\n\tDelete all the items that contain the word 'bonus' in their title : pyrate del somePodcast --pattern='*bonus*'".format(pad="")
+
+#the add subcommand 
+rater_del = subparsers.add_parser('del',    # the del subcommand of the rated subcommand
+                                 description=rater_del_descript,
+                                 usage=rater_del_usage,
+                                  formatter_class=argparse.RawDescriptionHelpFormatter,
+                                  add_help=False)
+
+
+rater_del._optionals.title = 'Options' # the 'optional arguments' group in the help output will now appear as being titled 'get help'
+
+rater_del_helpgrp= rater_del.add_argument_group(title='Get help')
+rater_del_helpgrp.add_argument('-h', '--help',
+                               action='help')
+
+
+
+
+
+################################################
+
+rater_change_usage= "pyrate change (-t,--title TITLE | -r,--rating RATING) item list".format()
+rater_change_descript = "Change either the title using the -t option or the rating, using the -r option for the item found in list LIST\nThe item can be specified either by its handle or by its title\n\n\nExamples:\n\t*change the title for item identified by handle 5 in the list somePodcast to 'new titlte' : pyrate change --title='new title' 5 somePodcast\n\t*change the rating for the item titled 'someitem' found in the list somePodcast : pyrate change someitem somePodcast --rating 8".format(pad="")
+
+#the add subcommand 
+rater_change = subparsers.add_parser('change', add_help=False, #the change subcommand of the rated subcommand
+                                 description=rater_change_descript,
+                                 usage=rater_change_usage,
+                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+
+rater_change._optionals.title = 'Options' # the 'optional arguments' group in the help output will now appear as being titled 'get help'
+rater_change_helpgrp = rater_change.add_argument_group(title='Get Help')
+rater_change_argumentsgrp = rater_change.add_argument_group(title='Arguments')
+
+
+
+rater_addgroup = rater_add.add_argument_group(title='arguments')
+
+rater_addgroup.add_argument('add',
+                       action="store_true",
+                       help="add new rating")
+
+
+rater_addgroup.add_argument('-t', '--title',
+                       type=str,
+                       action="store",
+                       required="yes",
+                       help="title of the item being rated")
+#here I should probably use nargs = +; That way, if  the user forgets to pass a string and only the first word (up until the parser runs into whitespace) is caught by the parser, I can get everything in a list and then join the separate strings in the list into a string.
+
+rater_addgroup.add_argument('-r', '--rating',
+                      dest='rating',
+                      action="store",
+                      required="yes",
+                      type=int,
+                      help="specify the rating for the item being rated")
+
+rater_addgroup.add_argument('list',
+                       metavar='list',
+                       action='store',
+                       type=str,
+                       help='the name of the list the rating is to be added to. LIST has to be an existing list')
+
+
+####################################################----------------rater show
+# #options used to display ratings
+rater_show_grp = rater_show.add_argument_group(title='Required arguments')
+rater_show_opt_grp = rater_show.add_argument_group(title='Optional arguments')
+rater_show_grp.add_argument('show',
+                        action="store_true")
+
+# rater_show_matcher=rater_show.add_mutually_exclusive_group(title='Optional arguments')  # this works, but then --rated and --pattern appear under the 'get help' section along with -h.
+# And I can't create another group since they're already part of one
+#I will have instead to make sure that the two options aren't used at the same time with some conditionals in the script below, and move them out of the mutually exclusive group here and within a group that I can name
+
+# rater_show_grp.add_argument('--rated')
+
+# rater_show_grp.add_argument('--pattern')
+
+rater_show_opt_grp.add_argument('--rated',
+                       dest='rated',
+                       action="store",
+                       # default='None',  # was 'all
+                       nargs="+",
+                       metavar='R',
+                       help="Show items with the rating R. R can be a single integer, i.e. --rated 10, a comma-separated list, i.e. --rated 5,8,9, or a range, i.e. --rated 8-10")
+
+
+rater_show_opt_grp.add_argument('--pattern',
+                                dest='pattern',
+                                action='store',
+                                metavar='PATTERN',
+                                help="Show items whose title matches against the POSIX * wildcard. This lets you quickly list items whose title starts or ends with, or contains certain characters, e.g. --pattern season1* would list all items whose name starts with 'season1' ")
+
+    
+rater_show_grp.add_argument('list',
+                        action='store',
+                        help='the name of the list the items are to be found in')
+                        
+
+
+
+rater_to_delete= rater_del.add_mutually_exclusive_group()
+
+rater_del.add_argument('rm',
+                       action='store_true')
+
+
+rater_to_delete.add_argument('-i','--item',
+                       action='store',
+                       help='the item to be deleted. ITEM is the name of the item to be deleted')
+
+rater_to_delete.add_argument('--pattern',
+                             action='store',
+                             help='delete all the items that match using the POSIX * wildcard - e.g. starting with string: string*, ending with string: *string, or containing string: *string*')
+
+
+rater_to_delete.add_argument('--handle',
+                       action='store',
+                       metavar='N',
+                       nargs='+',
+                       help='This option allows you to delete multiple items at once. That is, you can simply use rater delete -i ITEM LIST, to delete a single item from a list, by name, or you can NOT pass any argument to delete and optionally use --handle instead to either delete a single item by its HANDLE (the value in hte HND column), or multiple items by their handle. If you want to delete multiple items at once, they can either be a comma-separated list .e.g. 10,12,17,21,2000, a range e.g. 20-100, a list of ranges e.g. 10-25, 100-150, or both e.g. 2,7,54,121,200-221,225,228,300-321 and so on. The items with that number in their HND column will be deleted from the list specified')
+
+
+rater_del.add_argument('list',
+                       action='store',
+                       help='the name of the list the item is to be removed from')
+                       
+
+
+################read from file
+rater_read_from_file.add_argument('from_file',
+                                  action='store_true',
+                                  help="read entries from file")
+
+rater_read_from_file.add_argument('filename',
+                                  action='store',
+                                  metavar='FILE',
+                                  help="the name of a file to read entries from. This is an alternative to using --rated R --title T when adding an item, which only lets you add one item at a time, whereas you can add as many as you want with --from-file FILE. The entries in the file FILE should be one per line, in the form 'item_title==rating; Note the '==': the title and rating should be separated by a '=='")
+
+
+rater_read_from_file.add_argument('list',
+                                 action='store',
+                                 metavar='LIST',
+                                 help='the name of the list the items read from FILE are to be added to. LIST needs to be an existing list')
+
+
+################################################################
+rater_change_argumentsgrp.add_argument('change',
+                          action='store_true')
+
+rater_change_argumentsgrp.add_argument('item',
+                         action='store',
+                         help='the item to be modified. This can be either the name of an item e.g. "season1 episode 1", or the associated number displayed in the HND column in the output')
+
+rater_change_argumentsgrp.add_argument('list',
+                          action='store',
+                          help='the list the specified item is to be found in')
+
+rater_change_helpgrp.add_argument('-h','--help', action='help')
+
+change_item = rater_change.add_mutually_exclusive_group()
+
+
+change_item.add_argument('-t', '--title',
+                         action='store',
+                         metavar='TITLE',
+                         help='used to specify the NEW title of the previously specified item')
+
+
+change_item.add_argument('-r', '--rating',
+                         action='store',
+                         metavar='RATING',
+                         help='used to specify the NEW rating of the previously specified item')
+
+
+
+args = main_parser.parse_args()
+
+#
+#
+#
+#
+
+################################################################################################################
+############################################################################################
+###############################    HELPER FUNCTIONS   #####################################
+
+
+
+#################################################################################################
+#####instantiating the debugger_cl class and initializing it with either a value of debugging=True or False, depending on whether args.debugging is True
+if args.debugging:
+    #print('debugging is true; instantiating debugger_cl with debugging=True')
+    try:
+        debugger_inst = debugger_cl(debugging=True)  # instantiate debugger_cl from the mod module
+        debugger_inst.c_debugging()  # set deb_msg to true inside the debugger_cl in the module, so that debugging messages are enabled in the module as well
+    except:
+        print("couldn't instantiate debugger_cl")
+elif not args.debugging:
+    #print('debugging is false; instantiating debugger_cl with debugging=False')
+    try:
+        debugger_inst = debugger_cl(debugging=False)
+    except:
+        print("couldn't instantiate debugger_cl")
+
+        
+# debugger_inst.debug_msg('debugging is True. Using debugger...')
+
+
+#######################################################
+
+
+
+try:
+    db = db_interface()# instantiate the db_interface  class from the pylists module
+    debugger_inst.debug_msg('db instantiated')
+except:
+    debugger_inst.debug_msg('instantiation failed')
+
+else:
+    try:
+        db.init_db()                     # initialize the database - check if it exists, and if so retrieve it, otherwise create it
+        debugger_inst.debug_msg('database initialized')
+    except:
+        debugger_inst.debug_msg('database initialization failed')
+    else:
+        try:
+            db.get_cursor()
+            debugger_inst.debug_msg('obtained a cursor object')
+        except:
+            debugger_inst.debug_msg('failed to get a cursor object')
+
+
+try:
+     rater=rater_cl()
+     debugger_inst.debug_msg('rater_cl instantiated')
+except:
+     debugger_inst.debug_msg('rater_cl instantiation failed')
+#################################################################################################
+
+
+ 
+debugger_inst.debug_msg(args)
+debugger_inst.debug_msg(args.subparsers, 'subparser used')
+#if the 'add' subcommand and the corresponding subparser is used
+if args.subparsers == 'add-list':
+    if args.name:
+        db.create_table(args.name, 'rater')
+
+#if the 'lists' subcommand and the corresponding subparser is used
+elif args.subparsers == 'lists':
+    # if args.type:               #no need for type anymore since, at least for the time being, there will only be one type: rater. Nothing else is implemented
+        # db.get_lists(kind=rater)
+        
+    # else:
+    db.get_lists()
+    debugger_inst.debug_msg('args_lists here')
+        
+
+#implement this as a method to be called instead
+elif args.subparsers == 'del-list':
+    try:
+        db.delete_table(args.list)
+    except:
+        debugger_inst.debug_msg('deletion failed')
+    
+     
+
+#####################################################
+###rater subparser; rater options
+
+elif args.subparsers == 'add':
+####################        
+    try:
+        if args.add == True:    # args.add# 'if a ==True blahblah, else blah' doesn't work. If the namespacae dictionary of argparse doesn't contain 'a', an exception is raised when using the rater subparser but with another option e.g. show instead of add. Hence, try blocks can avoid that
+            debugger_inst.debug_msg('args.add is true')
+
+    except:
+        # print('exception associated with args.add')
+        pass
+
+    #if there's no exception do the below:
+    else:
+        try:
+            if not db.check_list(args.list):
+                debugger_inst.debug_msg('list nonexistent. Exitting.')
+
+        except:
+            debugger_inst.debug_msg('Attempt to check for the existence of list', args.list, 'failed')
+
+        #if the list exists and was verified to exist without any trouble, do the below:    
+        else:
+
+           try:
+               max_val = db.get_max('num', args.list)  # num is the row_number column that I have created by default on all columns
+               debugger_inst.debug_msg('getting the max_value... max value is', max_val)
+           except:
+               debugger_inst.debug_msg('failed to get the max_value....error')
+           else:
+               try:
+                   rater.add_item(max_val, args.list, args.title, args.rating, callable=db.add_item)
+                   debugger_inst.debug_msg('calling rater.add_item')
+               except:
+                   debugger_inst.debug_msg('exception associated with adding rater item')
+
+#######################################################################################
+elif args.subparsers == 'show':
+    try:
+       if args.show == True:
+           debugger_inst.debug_msg('args.show is true')
+    except:
+        pass
+    # if there's no exception - meaning if args.show is True
+    else:
+        regs = re_matcher()
+        if db.check_list(args.list) == True:
+            debugger_inst.debug_msg(args.list, 'list found')
+            rater = rater_cl()
+
+            if args.rated == None and args.pattern == None:  # if neither --rated nor --pattern are used, make 'all' the default and pass it to regex matcher
+                items = db.get_list_items(args.list) 
+                to_format, nums = regs.match_items('all', items, rater=True)
+              
+                debugger_inst.debug_msg('to format', to_format, 'items', items)  
+                rater.show_items(to_format, num_list=nums)
+
+
+            elif args.rated and args.pattern:# you can't use both at the same time. This was initially implemented using a mutually exclusive group in the argparse itself, but I needed to have them in another group and argparse doesn't let you nest groups or have items be part of two groups at once
+                print('ERROR! Only one of the --rated and --pattern options can be used at once')
+        
+            elif args.rated:    # if --rated is used and so isn't NONe, do the same as above but use the value stored by the --rated option at the commandline
+                debugger_inst.debug_msg('args.rated being used')
+                items = db.get_list_items(args.list) 
+                to_format, nums = regs.match_items(args.rated, items, rater=True)
+              
+                debugger_inst.debug_msg('to format', to_format, 'items', items)
+                rater.show_items(to_format, num_list=nums)
+
+
+                
+            elif args.pattern:  # if pattern is used instead of --rated, meaning the items are to be matched by their title string, as opposed to their rating value
+                debugger_inst.debug_msg('pattern being used, rather than rater')
+                com = regs.wildcard_match(args.pattern, args.list, selection=True)  # this can be used either for showing or deleting items
+                items=db.sql_wildcard_show(com)
+                rater.show_items(items)  # num_list is None by default so no need to specify it
+                
+                debugger_inst.debug_msg(com)
+        #                 
+        else:
+            debugger_inst.debug_msg('list not found')
+      
+       
+
+
+
+
+        
+#        try:
+#             if db.check_list(args.list) == True:
+#                 print(args.list, 'list found')
+#                 rater = rater_cl()
+#                 items = db.get_list_items(args.list)
+#                 to_format, items = rater.show_items(args.rated, items)
+                
+#                 print('to format', to_format, 'items', items)
+#                 rater.print_items(to_format, num_list=items)
+
+#             else:
+#                 print('list not found')
+#        except:
+#             print('Attempt to check for the existence of list', args.list, 'failed')
+#             #if the list exists and was verified to exist without any trouble, do the below:    
+        
+           
+# #############################if del is used
+elif args.subparsers == 'del':
+    try:
+        if args.rm == True:
+            debugger_inst.debug_msg('args.del is true')
+    except:
+        pass
+    else:
+        #try:
+
+        if args.handle:  # I'm checking the list because deleting multiple items at a time can only be done using their handle value, not title
+            debugger_inst.debug_msg('handle being used for deletion')
+            reg = re_matcher()
+            _, items = reg.match_items(args.handle, None, rater=False)
+            debugger_inst.debug_msg('items', items)
+            db.delete_item(items, args.list, handle=True)  # many is a flag that lets the other function know it's getting multiple items, not just one, up for deletion
+
+        elif args.item:
+            debugger_inst.debug_msg('single item deletion of string item. Not using handle')
+            db.delete_item(args.item, args.list)  # many=False; the function called is getting just one item to be deleted - from the command line, unmatched by re     
+
+            #print(items)
+        #except:
+         #   print('deletion failed. Check that the name of the list is correct')
+    
+
+        elif args.pattern:
+            debugger_inst.debug_msg('pattern being used for deletion')
+                        
+            regs = re_matcher()
+            com = regs.wildcard_match(args.pattern, args.list, deletion=True)  # this can be used either for showing or deleting items
+
+            db.execute_sql(com, deletion=True, list_name=args.list)
+            
+    
+
+
+#############################if from-file is used
+elif args.subparsers == 'from-file':
+    try:
+       if args.from_file == True:
+           debugger_inst.debug_msg('from-file is true')
+    except:
+        debugger_inst.debug_msg('read-from-file failed')
+        pass
+    #if there's no exception - meaning if args.show is True
+    else:
+        try:
+            debugger_inst.debug_msg('starting the from-file reading process')
+            # print('getting the max_value... max value is', max_val)
+        except:
+            debugger_inst.debug_msg('failed to get the max_value....error')
+
+        else:
+            try:
+                rater=rater_cl()
+                for title,rating in rater.read_from_file(args.filename):
+                    max_val = db.get_max('num', args.list)  # num is the row_number column that I have created by default on all columns
+                    rater.add_item(max_val, args.list, title, rating, db.add_item)
+            except:
+                debugger_inst.debug_msg('failed to read values from file')
+
+
+
+##########################if 'change' is used
+elif args.subparsers == 'change':
+    try:      
+        if args.change == True:
+            debugger_inst.debug_msg('args.change is true')
+            rater=rater_cl()
+    except:
+        pass
+    else:
+        try:
+           if db.check_list(args.list) == True:
+               debugger_inst.debug_msg(args.list, 'list found')
+
+               try:
+                debugger_inst.debug_msg('calling db.execute from the main script')
+                if args.rating:
+                    debugger_inst.debug_msg('calling rater.change_item_rating')
+                    db.execute_sql(rater.change_item_rating(args.item, args.rating, args.list))
+                elif args.title:
+                    debugger_inst.debug_msg('calling rater.change_item_title')
+                    db.execute_sql(rater.change_item_title(args.item, args.title, args.list))
+                    # b = rater.change_item_title(args.item, args.title, args.list)
+                    # print(b)
+               except:
+                   ('failed to call db execute and args_change')
+            #check to see if the list exists, else return an error
+
+            
+           else:
+               debugger_inst.debug_msg('list nonexistent')
+        except:
+            debugger_inst.debug_msg('failed to check the existence of the list')
+           
+
+           
