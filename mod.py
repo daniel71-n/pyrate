@@ -2,10 +2,7 @@
 import re
 import sqlite3
 import os
-# def track(inst):
-#     "decorator that adds instances that are created to the tracker.lists class data attribute "
-#     tracker.lists.add(inst)
-#     return inst
+
 
 class debugger_cl ():
     """This takes a string as an argument that's supposed to be printed out for debugging and either prints it or does nothing,
