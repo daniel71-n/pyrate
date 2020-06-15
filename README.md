@@ -23,7 +23,7 @@ subcommands:
 ```
 
 
-#Some examples: 
+**Some examples:** 
 
 pyrate lists
 ```
